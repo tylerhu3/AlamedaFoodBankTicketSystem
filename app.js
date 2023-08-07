@@ -2,10 +2,12 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const bodyParser = require('body-parser');
 const cors = require('cors'); // Import the cors package
+const { EventEmitter } = require('events');
 
 const app = express();
 app.use(cors());
 const port = 3000;
+const eventEmitter = new EventEmitter();
 
 app.use(bodyParser.json());
 
@@ -66,6 +68,7 @@ app.post('/tickets', (req, res) => {
         console.error('Error fetching tickets:', err.message);
         res.status(500).json({ error: 'Error fetching tickets from the database.' });
       } else {
+        console.log("all of the table: ", rows)
         res.status(200).json(rows);
       }
     });
@@ -86,9 +89,25 @@ app.post('/tickets', (req, res) => {
     });
   });
   
-  // PUT endpoint to update a ticket by ID
+// GET endpoint to retrieve the next ticket based on criteria
+app.get('/next', (req, res) => {
+  console.log("calling /next ")
+  const query = 'SELECT * FROM tickets WHERE done = ? ORDER BY positionInLine ASC LIMIT 1';
+  db.get(query, [false], (err, row) => {
+    if (err) {
+      console.error('Error fetching next ticket:', err.message);
+      res.status(500).json({ error: 'Error fetching the next ticket from the database.' });
+    } else if (!row) {
+      res.status(404).json({ error: 'Next ticket not found.' });
+    } else {
+      res.status(200).json(row);
+    }
+  });
+});
+  
 // PUT endpoint to update a ticket by ID
 app.put('/tickets/:id', (req, res) => {
+    console.log("TYLER: ",  req.body)
     const ticketId = req.params.id;
     const { firstName, lastName, scheduleAppointment, firstTimeVisitor, positionInLine, additionalNotes, done } = req.body;
     const updateQuery = 'UPDATE tickets SET firstName = ?, lastName = ?, scheduleAppointment = ?, firstTimeVisitor = ?, positionInLine = ?, additionalNotes = ?, done = ? WHERE id = ?';
@@ -103,6 +122,37 @@ app.put('/tickets/:id', (req, res) => {
       }
     });
   });
+
+  // SSE endpoint to listen for updates on tickets
+app.get('/sse/tickets', (req, res) => {
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+
+  // Send the initial data to the client
+  db.all('SELECT * FROM tickets', (err, rows) => {
+    if (err) {
+      console.error('Error fetching tickets:', err.message);
+    } else {
+      const data = JSON.stringify(rows);
+      res.write(`data: ${data}\n\n`);
+    }
+  });
+
+  // Register a listener for the 'ticketUpdated' event
+  const ticketUpdatedListener = (data) => {
+    res.write(`data: ${data}\n\n`);
+  };
+  eventEmitter.on('ticketUpdated', ticketUpdatedListener);
+
+  // Remove the listener when the client disconnects
+  req.on('close', () => {
+    eventEmitter.off('ticketUpdated', ticketUpdatedListener);
+  });
+});
   
   
   // DELETE endpoint to delete a ticket by ID
