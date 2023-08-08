@@ -45,7 +45,7 @@ const db = new sqlite3.Database('tickets.db', (err) => {
 app.get('/tickets/latest', (req, res) => {
   const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
 
-  const query = 'SELECT * FROM tickets WHERE time >= ? AND done = 0 ORDER BY positionInLine DESC LIMIT 1';
+  const query = 'SELECT * FROM tickets WHERE time >= ? ORDER BY positionInLine DESC LIMIT 1';
   db.get(query, [twelveHoursAgo], (err, row) => {
     if (err) {
       console.error('Error fetching latest ticket:', err.message);
