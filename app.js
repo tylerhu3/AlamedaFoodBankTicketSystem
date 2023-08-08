@@ -41,6 +41,39 @@ const db = new sqlite3.Database('tickets.db', (err) => {
     }
   });
   
+// GET endpoint to retrieve the ticket with the biggest "positionInLine" where "done" is false from the last 12 hours
+app.get('/tickets/latest', (req, res) => {
+  const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+
+  const query = 'SELECT * FROM tickets WHERE time >= ? AND done = 0 ORDER BY positionInLine DESC LIMIT 1';
+  db.get(query, [twelveHoursAgo], (err, row) => {
+    if (err) {
+      console.error('Error fetching latest ticket:', err.message);
+      res.status(500).json({ error: 'Error fetching the latest ticket from the database.' });
+    } else if (!row) {
+      res.status(404).json({ error: 'Latest ticket not found.' });
+    } else {
+      res.status(200).json(row);
+    }
+  });
+});
+
+// GET endpoint to retrieve the ticket with the biggest "positionInLine" where "done" is false from the last 12 hours
+app.get('/tickets/nextInLine', (req, res) => {
+  const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+
+  const query = 'SELECT * FROM tickets WHERE time >= ? AND done = 0 ORDER BY positionInLine ASC LIMIT 1';
+  db.get(query, [twelveHoursAgo], (err, row) => {
+    if (err) {
+      console.error('Error fetching latest ticket:', err.message);
+      res.status(500).json({ error: 'Error fetching the latest ticket from the database.' });
+    } else if (!row) {
+      res.status(404).json({ error: 'Latest ticket not found.' });
+    } else {
+      res.status(200).json(row);
+    }
+  });
+});
   
 // POST endpoint to create a new ticket
 app.post('/tickets', (req, res) => {
