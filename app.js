@@ -5,9 +5,25 @@ const cors = require('cors'); // Import the cors package
 const { EventEmitter } = require('events');
 
 const app = express();
-app.use(cors());
+// Allow CORS from all devices
+app.use(cors({
+  origin: '*',
+  // You can also specify other CORS options here
+}));
+
 const port = 3000;
 const eventEmitter = new EventEmitter();
+
+
+// serve up production assets
+app.use(express.static('build'));
+
+// let the react app to handle any unknown routes 
+// serve up the index.html if express does'nt recognize the route
+const path = require('path');
+
+// if no
+
 
 app.use(bodyParser.json());
 
@@ -203,6 +219,9 @@ app.get('/sse/tickets', (req, res) => {
     });
   });
   
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname,  'build', 'index.html'));
+    });
 
 // Start the server
 app.listen(port, () => {
