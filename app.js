@@ -150,26 +150,54 @@ app.get('/tickets/nextInLine', (req, res) => {
   });
 });
 
+// Define an asynchronous function to get the biggest positionInLine
+async function getMaxPositionInLineAsync() {
+  return new Promise((resolve, reject) => {
+    const query = `
+      SELECT MAX(positionInLine) AS maxPosition
+      FROM tickets;
+    `;
+
+    db.get(query, (err, row) => {
+      if (err) {
+        console.error('Error fetching max positionInLine:', err.message);
+        reject(err);
+      } else {
+        const maxPosition = row ? row.maxPosition : 0;
+        resolve(maxPosition);
+      }
+    });
+  });
+}
+
 // POST endpoint to create a new ticket
-app.post('/tickets', (req, res) => {
-  console.log("TYLER post request ", req.body)
+app.post('/tickets', async (req, res) => {
+  console.log("TYLER post request ", req.body);
   const sessionId = req.headers['x-session-id']; // Access the custom header
 
-  const { firstName, lastName, scheduleAppointment, firstTimeVisitor, positionInLine, additionalNotes, done, scheduleAppointmentTime } = req.body;
+  const { firstName, lastName, scheduleAppointment, firstTimeVisitor, additionalNotes, done, scheduleAppointmentTime } = req.body;
   const currentTime = new Date().toISOString().slice(0, 16);
 
-  const insertQuery = 'INSERT INTO tickets (firstName, lastName, scheduleAppointment, firstTimeVisitor, time, positionInLine, additionalNotes, done, scheduleAppointmentTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
-  db.run(insertQuery, [firstName, lastName, scheduleAppointment, firstTimeVisitor, currentTime, positionInLine, additionalNotes, done, scheduleAppointmentTime], function (err) {
-    if (err) {
-      console.error('Error creating ticket:', err.message);
-      res.status(500).json({ error: 'Error creating the ticket.' });
-    } else {
-      const newTicketId = this.lastID;
-      res.status(201).json({ id: newTicketId, ...req.body, time: currentTime });
-      const updateData = { ...req.body, sessionId: sessionId }; // Include the session ID in the update data
-      eventEmitter.emit('ticketUpdated', JSON.stringify(updateData));
-    }
-  });
+  try {
+    const maxPositionInLine = await getMaxPositionInLineAsync();
+    const positionInLine = maxPositionInLine + 1;
+
+    const insertQuery = 'INSERT INTO tickets (firstName, lastName, scheduleAppointment, firstTimeVisitor, time, positionInLine, additionalNotes, done, scheduleAppointmentTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    db.run(insertQuery, [firstName, lastName, scheduleAppointment, firstTimeVisitor, currentTime, positionInLine, additionalNotes, done, scheduleAppointmentTime], function (err) {
+      if (err) {
+        console.error('Error creating ticket:', err.message);
+        res.status(500).json({ error: 'Error creating the ticket.' });
+      } else {
+        const newTicketId = this.lastID;
+        res.status(201).json({ id: newTicketId, ...req.body, time: currentTime });
+        const updateData = { ...req.body, sessionId: sessionId }; // Include the session ID in the update data
+        eventEmitter.emit('ticketUpdated', JSON.stringify(updateData));
+      }
+    });
+  } catch (err) {
+    console.error('Error getting max positionInLine:', err);
+    res.status(500).json({ error: 'Error creating the ticket.' });
+  }
 });
 
 // GET endpoint to retrieve all tickets
@@ -257,6 +285,8 @@ app.get('/sse/tickets', (req, res) => {
 // DELETE endpoint to delete a ticket by ID
 app.delete('/tickets/:id', (req, res) => {
   const ticketId = req.params.id;
+  const sessionId = req.headers['x-session-id']; // Access the custom header
+
   db.run('DELETE FROM tickets WHERE id = ?', ticketId, function (err) {
     if (err) {
       console.error('Error deleting ticket:', err.message);
@@ -265,6 +295,8 @@ app.delete('/tickets/:id', (req, res) => {
       res.status(404).json({ error: 'Ticket not found.' });
     } else {
       res.status(200).json({ message: 'Ticket deleted successfully.' });
+      const updateData = { ...req.body, sessionId: sessionId }; // Include the session ID in the update data
+      eventEmitter.emit('ticketUpdated', JSON.stringify(updateData));
     }
   });
 });
