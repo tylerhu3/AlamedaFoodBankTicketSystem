@@ -11,7 +11,7 @@ app.use(cors({
   // You can also specify other CORS options here
 }));
 
-const port = 3000;
+const port = 8888;
 const eventEmitter = new EventEmitter();
 
 
@@ -52,6 +52,26 @@ const db = new sqlite3.Database('tickets.db', (err) => {
       }
     });
   }
+});
+
+app.get('/tickets/not-done-from-last-12-hours', (req, res) => {
+  const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+
+  const query = `
+    SELECT * FROM tickets 
+    WHERE time >= ? AND done = 0
+  `;
+
+  db.all(query, [twelveHoursAgo], (err, rows) => {
+    if (err) {
+      console.error('Error fetching recent undone tickets:', err.message);
+      res.status(500).json({ error: 'Error fetching the recent undone tickets from the database.' });
+    } else if (rows.length === 0) {
+      res.status(404).json({ error: 'No recent undone tickets found.' });
+    } else {
+      res.status(200).json(rows);
+    }
+  });
 });
 
 // Define the route for your endpoint
@@ -99,11 +119,10 @@ app.get('/tickets/latest', (req, res) => {
   });
 });
 
-// GET endpoint to retrieve the ticket with the smallest "positionInLine" where "done" is false from the last 12 hours
 app.get('/tickets/nextInLine', (req, res) => {
   const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
-
-  console.log("Retrieving closest appointment or smallest position in line");
+  let dateNow = new Date(Date.now()).toISOString();
+  console.log("Retrieving closest appointment or smallest position in line, Date.now(): ", dateNow);
 
   const query = `
     SELECT * 
@@ -112,7 +131,7 @@ app.get('/tickets/nextInLine', (req, res) => {
     ORDER BY 
       CASE
         WHEN scheduleAppointmentTime IS NOT NULL AND scheduleAppointmentTime >= DATETIME(?, '-30 minutes') THEN ABS(JULIANDAY('now') - JULIANDAY(scheduleAppointmentTime))
-        ELSE 1
+        ELSE 9999
       END ASC,
       positionInLine ASC 
     LIMIT 1;
