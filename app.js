@@ -276,10 +276,37 @@ app.get('/sse/tickets', (req, res) => {
   };
   eventEmitter.on('ticketUpdated', ticketUpdatedListener);
 
+  const refreshEventHandler = data => {
+    console.log("refreshEventHandler triggered")
+    res.write(`event: refresh\ndata: ${data}\n\n`);
+  };
+
+  eventEmitter.on('refreshToken', refreshEventHandler);
+
+
   // Remove the listener when the client disconnects
   req.on('close', () => {
     eventEmitter.off('ticketUpdated', ticketUpdatedListener);
+    eventEmitter.removeListener('refreshToken', refreshEventHandler);
+
   });
+});
+
+// Handle the refresh request and trigger SSE updates
+app.get('/refresh', (req, res) => {
+  const refreshToken = req.headers['refreshtoken'];
+  console.log("/refresh called");
+  // Perform any necessary data fetching or processing
+  // ...
+  const updateData = { ...req.body, refreshtoken: refreshToken }; // Include the session ID in the update data
+  console.log("/refresh called2");
+
+  // Emit an SSE update event
+  eventEmitter.emit('refreshToken', JSON.stringify(updateData));
+  console.log("/refresh called3");
+
+  // Send a response
+  res.json({ message: 'Refresh request received.' });
 });
 
 // DELETE endpoint to delete a ticket by ID
