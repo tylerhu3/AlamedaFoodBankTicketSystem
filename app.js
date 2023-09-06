@@ -3,6 +3,7 @@ const sqlite3 = require('sqlite3').verbose();
 const bodyParser = require('body-parser');
 const cors = require('cors'); // Import the cors package
 const { EventEmitter } = require('events');
+const { Mutex } = require('async-mutex');
 
 const app = express();
 // Allow CORS from all devices
@@ -10,6 +11,7 @@ app.use(cors({
   origin: '*',
   // You can also specify other CORS options here
 }));
+
 
 const port = 8888;
 const eventEmitter = new EventEmitter();
@@ -23,6 +25,8 @@ app.use(express.static('build'));
 const path = require('path');
 
 app.use(bodyParser.json());
+
+var mutex = new Mutex();
 
 // Create a new database or connect to an existing one
 const db = new sqlite3.Database('tickets.db', (err) => {
@@ -177,10 +181,13 @@ app.post('/tickets', async (req, res) => {
 
   const { firstName, lastName, scheduleAppointment, firstTimeVisitor, additionalNotes, done, scheduleAppointmentTime } = req.body;
   const currentTime = new Date().toISOString().slice(0, 16);
+  let release ;
 
   try {
-    const maxPositionInLine = await getMaxPositionInLineAsync();
-    const positionInLine = maxPositionInLine + 1;
+   // Lock the code to ensure only one execution at a time.
+   release = await mutex.acquire();
+   const maxPositionInLine = await getMaxPositionInLineAsync();
+   const positionInLine = maxPositionInLine + 1;
 
     const insertQuery = 'INSERT INTO tickets (firstName, lastName, scheduleAppointment, firstTimeVisitor, time, positionInLine, additionalNotes, done, scheduleAppointmentTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
     db.run(insertQuery, [firstName, lastName, scheduleAppointment, firstTimeVisitor, currentTime, positionInLine, additionalNotes, done, scheduleAppointmentTime], function (err) {
@@ -197,7 +204,10 @@ app.post('/tickets', async (req, res) => {
   } catch (err) {
     console.error('Error getting max positionInLine:', err);
     res.status(500).json({ error: 'Error creating the ticket.' });
-  }
+  }finally {
+    // Ensure that the lock is released regardless of any error.
+    if (release) release();
+}
 });
 
 // GET endpoint to retrieve all tickets
